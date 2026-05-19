@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snir Franco — Kiosk Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f0f0f0;
+      color: #2e353b;
+      min-height: 100vh;
+    }
+
+    /* ---- Top navigation ---- */
+    .topbar {
+      background: #509ee3;
+      color: #fff;
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar .brand { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; }
+    .topbar .subtitle { font-size: 13px; opacity: 0.85; }
+    .topbar .date-badge {
+      background: rgba(255,255,255,0.2);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 13px;
+    }
+
+    /* ---- Layout ---- */
+    .page { max-width: 1400px; margin: 0 auto; padding: 24px 20px 48px; }
+
+    /* ---- Section headings ---- */
+    .section-heading {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #7c8d9a;
+      margin: 28px 0 12px;
+    }
+
+    /* ---- KPI card grid ---- */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .kpi-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px 20px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      border-left: 4px solid #509ee3;
+      transition: box-shadow 0.15s;
+    }
+    .kpi-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .kpi-card.green  { border-left-color: #84bb4c; }
+    .kpi-card.orange { border-left-color: #f9a825; }
+    .kpi-card.red    { border-left-color: #ed6e6e; }
+    .kpi-card.purple { border-left-color: #a989c5; }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #7c8d9a;
+      margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+      color: #2e353b;
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: #93a1ad;
+      margin-top: 6px;
+    }
+    .kpi-trend {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-top: 6px;
+    }
+    .kpi-trend.up   { background: #e8f5e9; color: #388e3c; }
+    .kpi-trend.down { background: #fce4e4; color: #c62828; }
+
+    /* ---- Chart cards ---- */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 16px;
+    }
+    .chart-grid.wide { grid-template-columns: 1fr 1fr; }
+
+    .chart-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .chart-card .chart-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #2e353b;
+      margin-bottom: 4px;
+    }
+    .chart-card .chart-sub {
+      font-size: 11px;
+      color: #93a1ad;
+      margin-bottom: 16px;
+    }
+    .chart-card canvas { width: 100% !important; }
+
+    /* ---- Table ---- */
+    .table-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      overflow-x: auto;
+    }
+    .table-card .chart-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #2e353b;
+      margin-bottom: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #7c8d9a;
+      border-bottom: 2px solid #e8ecf0;
+      padding: 0 12px 10px;
+    }
+    tbody tr:hover { background: #f7f9fc; }
+    tbody td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f0f2f5;
+      color: #2e353b;
+      vertical-align: middle;
+    }
+    .badge {
+      display: inline-block;
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge.ok     { background: #e8f5e9; color: #388e3c; }
+    .badge.alert  { background: #fce4e4; color: #c62828; }
+    .badge.miss   { background: #fff3e0; color: #e65100; }
+    .badge.review { background: #e8eaf6; color: #3949ab; }
+    .badge.open   { background: #e3f2fd; color: #1565c0; }
+
+    /* ---- Parse queue section ---- */
+    .queue-chip {
+      display: inline-block;
+      background: #fff3e0;
+      color: #e65100;
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* ---- Status bar ---- */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 12px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      font-size: 13px;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.green  { background: #84bb4c; }
+    .status-dot.yellow { background: #f9a825; }
+    .status-dot.red    { background: #ed6e6e; }
+    .status-label { color: #7c8d9a; font-size: 12px; }
+    .status-value { font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="brand">Snir Franco — Kiosk Operations</div>
+    <div class="subtitle">Philippines cosmetics kiosk chain</div>
+  </div>
+  <div class="date-badge" id="live-date">Loading...</div>
+</div>
+
+<div class="page">
+
+  <!-- System Status -->
+  <div class="section-heading">System Status</div>
+  <div class="status-bar">
+    <div class="status-dot green"></div>
+    <span class="status-value">WAHA</span>
+    <span class="status-label">Connected (snir-session)</span>
+    <div class="status-dot green"></div>
+    <span class="status-value">n8n</span>
+    <span class="status-label">Running (n8n.toolip.tech)</span>
+    <div class="status-dot green"></div>
+    <span class="status-value">Supabase</span>
+    <span class="status-label">kpgopmuzqpkxvsuzmepv</span>
+    <div class="status-dot yellow"></div>
+    <span class="status-value">Parse Queue</span>
+    <span class="status-label"><span class="queue-chip">7 pending review</span></span>
+  </div>
+
+  <!-- Today KPIs -->
+  <div class="section-heading">Today (May 19, 2026)</div>
+  <div class="kpi-grid">
+    <div class="kpi-card green">
+      <div class="kpi-label">Total Revenue (EOD)</div>
+      <div class="kpi-value">P1.24M</div>
+      <div class="kpi-trend up">+12% vs yesterday</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Live Events Captured</div>
+      <div class="kpi-value">87</div>
+      <div class="kpi-sub">across 6 locations</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">Avg Confidence</div>
+      <div class="kpi-value">0.93</div>
+      <div class="kpi-sub">7 low-confidence queued</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">Recon Status</div>
+      <div class="kpi-value">5/6 OK</div>
+      <div class="kpi-sub">1 location pending EOD</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Cash</div>
+      <div class="kpi-value">P382k</div>
+      <div class="kpi-trend down">-3% vs yesterday</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Card / GCash / Maya</div>
+      <div class="kpi-value">P858k</div>
+      <div class="kpi-trend up">+18% vs yesterday</div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="section-heading">Revenue Trends</div>
+  <div class="chart-grid wide">
+    <div class="chart-card">
+      <div class="chart-title">Daily Revenue — Last 14 Days</div>
+      <div class="chart-sub">EOD reported total across all locations (PHP)</div>
+      <canvas id="chartDailyRevenue" height="200"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Revenue by Location — Today</div>
+      <div class="chart-sub">EOD summary source of truth</div>
+      <canvas id="chartByLocation" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="section-heading">Payment Mix &amp; Classifier Health</div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">Payment Method Breakdown — Today</div>
+      <div class="chart-sub">From jpl_totals EOD summaries</div>
+      <canvas id="chartPayments" height="220"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Message Classification Mix — Today</div>
+      <div class="chart-sub">All messages processed by Haiku</div>
+      <canvas id="chartClassifier" height="220"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Confidence Distribution — Today</div>
+      <div class="chart-sub">% of messages per confidence bucket</div>
+      <canvas id="chartConfidence" height="220"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Hourly Sale Events — Today</div>
+      <div class="chart-sub">jpl_management live events count</div>
+      <canvas id="chartHourly" height="220"></canvas>
+    </div>
+  </div>
+
+  <!-- Top performers table -->
+  <div class="section-heading">Top Performers — Today</div>
+  <div class="table-card">
+    <div class="chart-title">Employee Leaderboard (Lead Sales)</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Employee</th>
+          <th>Location</th>
+          <th>Sales Count</th>
+          <th>Total Amount</th>
+          <th>Avg per Sale</th>
+          <th>Class</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td><td><strong>Tomas</strong></td><td>MELIA</td><td>14</td><td>P198,400</td><td>P14,171</td><td><span class="badge ok">A</span></td>
+        </tr>
+        <tr>
+          <td>2</td><td><strong>Yuri</strong></td><td>SMBF</td><td>11</td><td>P164,000</td><td>P14,909</td><td><span class="badge ok">A</span></td>
+        </tr>
+        <tr>
+          <td>3</td><td><strong>Vanessa</strong></td><td>FTV</td><td>9</td><td>P142,500</td><td>P15,833</td><td><span class="badge ok">A</span></td>
+        </tr>
+        <tr>
+          <td>4</td><td><strong>Edwin</strong></td><td>MELIA</td><td>12</td><td>P136,800</td><td>P11,400</td><td><span class="badge review">B</span></td>
+        </tr>
+        <tr>
+          <td>5</td><td><strong>Jasmine</strong></td><td>BDO</td><td>8</td><td>P98,200</td><td>P12,275</td><td><span class="badge review">B</span></td>
+        </tr>
+        <tr>
+          <td>6</td><td><strong>Karen</strong></td><td>SMBF</td><td>7</td><td>P84,600</td><td>P12,086</td><td><span class="badge review">B</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Reconciliation table -->
+  <div class="section-heading">Reconciliation — Today</div>
+  <div class="table-card">
+    <div class="chart-title">Live Events vs EOD Reported</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Location</th>
+          <th>Sum Live Events</th>
+          <th>EOD Reported</th>
+          <th>Diff</th>
+          <th>Diff %</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>MELIA</td><td>P521,200</td><td>P521,285</td><td>-P85</td><td>-0.02%</td><td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+          <td>SMBF</td><td>P312,400</td><td>P318,000</td><td>-P5,600</td><td>-1.76%</td><td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+          <td>FTV</td><td>P189,300</td><td>P192,000</td><td>-P2,700</td><td>-1.41%</td><td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+          <td>BDO</td><td>P145,600</td><td>P112,000</td><td>+P33,600</td><td>+30%</td><td><span class="badge alert">ALERT</span></td>
+        </tr>
+        <tr>
+          <td>SM North</td><td>P78,200</td><td>P79,400</td><td>-P1,200</td><td>-1.51%</td><td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+          <td>Glorietta</td><td>P0</td><td>—</td><td>—</td><td>—</td><td><span class="badge miss">NO EOD</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Parse Review Queue -->
+  <div class="section-heading">Parse Review Queue</div>
+  <div class="table-card">
+    <div class="chart-title">Low-Confidence Messages Pending Human Review</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Received</th>
+          <th>Group</th>
+          <th>Sender</th>
+          <th>Message</th>
+          <th>Guessed Class</th>
+          <th>Confidence</th>
+          <th>Reason</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>09:14</td><td>jpl_management</td><td>+63917xxx</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Done na yung tipul ni Tomas 8500</td>
+          <td>single_sale</td><td>0.72</td><td>low_confidence</td>
+          <td><span class="badge open">PENDING</span></td>
+        </tr>
+        <tr>
+          <td>11:02</td><td>jpl_management</td><td>+63918xxx</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Add 3k po sa account ni Karen</td>
+          <td>single_sale</td><td>0.68</td><td>low_confidence</td>
+          <td><span class="badge open">PENDING</span></td>
+        </tr>
+        <tr>
+          <td>13:45</td><td>jpl_totals</td><td>+63919xxx</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">FTV EOD maya 42 gcash 18 bdo 22 total 82</td>
+          <td>eod_summary</td><td>0.81</td><td>low_confidence</td>
+          <td><span class="badge open">PENDING</span></td>
+        </tr>
+        <tr>
+          <td>14:20</td><td>jpl_management</td><td>+63917xxx</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Sige pwede na mag-add</td>
+          <td>unknown</td><td>0.45</td><td>unknown_class</td>
+          <td><span class="badge open">PENDING</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  // Live date
+  document.getElementById('live-date').textContent =
+    new Date().toLocaleDateString('en-PH', { weekday:'short', year:'numeric', month:'short', day:'numeric', timeZone:'Asia/Manila' });
+
+  const BLUE   = '#509ee3';
+  const GREEN  = '#84bb4c';
+  const ORANGE = '#f9a825';
+  const RED    = '#ed6e6e';
+  const PURPLE = '#a989c5';
+  const TEAL   = '#50d9d3';
+  const PINK   = '#f87171';
+
+  // 1. Daily Revenue last 14 days
+  (function() {
+    const labels = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000);
+      labels.push(d.toLocaleDateString('en-PH', { month:'short', day:'numeric', timeZone:'Asia/Manila' }));
+    }
+    const data = [980000,1050000,870000,1120000,1240000,990000,860000,1380000,1150000,1020000,940000,1180000,1100000,1240000];
+    new Chart(document.getElementById('chartDailyRevenue'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Total Revenue (PHP)',
+          data,
+          borderColor: BLUE,
+          backgroundColor: 'rgba(80,158,227,0.1)',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            ticks: {
+              callback: v => 'P' + (v/1000).toFixed(0) + 'k'
+            }
+          }
+        }
+      }
+    });
+  })();
+
+  // 2. Revenue by location today
+  (function() {
+    const locations = ['MELIA','SMBF','FTV','BDO','SM North','Glorietta'];
+    const amounts   = [521285, 318000, 192000, 112000, 79400, 0];
+    new Chart(document.getElementById('chartByLocation'), {
+      type: 'bar',
+      data: {
+        labels: locations,
+        datasets: [{
+          label: 'EOD Total (PHP)',
+          data: amounts,
+          backgroundColor: [BLUE,GREEN,ORANGE,PURPLE,TEAL,RED],
+          borderRadius: 4
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            ticks: {
+              callback: v => 'P' + (v/1000).toFixed(0) + 'k'
+            }
+          }
+        }
+      }
+    });
+  })();
+
+  // 3. Payment methods donut
+  (function() {
+    new Chart(document.getElementById('chartPayments'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Cash','BPI Card','GCash','Maya','BDO','KLP/Other'],
+        datasets: [{
+          data: [382000, 210000, 198000, 142000, 64000, 244000],
+          backgroundColor: [ORANGE,BLUE,GREEN,PURPLE,TEAL,PINK],
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        plugins: {
+          legend: { position: 'right', labels: { font: { size: 12 } } }
+        },
+        cutout: '60%'
+      }
+    });
+  })();
+
+  // 4. Classifier mix donut
+  (function() {
+    new Chart(document.getElementById('chartClassifier'), {
+      type: 'doughnut',
+      data: {
+        labels: ['single_sale','eod_summary','chatter','announcement','contest','unknown'],
+        datasets: [{
+          data: [68, 12, 8, 5, 2, 5],
+          backgroundColor: [BLUE,GREEN,TEAL,ORANGE,PURPLE,RED],
+          borderWidth: 2,
+          borderColor: '#fff'
+        }]
+      },
+      options: {
+        plugins: {
+          legend: { position: 'right', labels: { font: { size: 12 } } }
+        },
+        cutout: '60%'
+      }
+    });
+  })();
+
+  // 5. Confidence distribution bar
+  (function() {
+    new Chart(document.getElementById('chartConfidence'), {
+      type: 'bar',
+      data: {
+        labels: ['0.0-0.5','0.5-0.7','0.7-0.85','0.85-0.95','0.95-1.0'],
+        datasets: [{
+          label: '% of messages',
+          data: [2, 5, 8, 38, 47],
+          backgroundColor: [RED, ORANGE, '#fdd835', GREEN, BLUE],
+          borderRadius: 4
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            ticks: { callback: v => v + '%' },
+            max: 60
+          }
+        }
+      }
+    });
+  })();
+
+  // 6. Hourly events
+  (function() {
+    const hours = [];
+    const counts = [];
+    for (let h = 8; h <= 21; h++) {
+      hours.push(h + ':00');
+      // Simulated bell-curve activity
+      const peak = 14;
+      counts.push(Math.max(0, Math.round(12 - Math.abs(h - peak) * 1.8 + Math.random() * 3)));
+    }
+    new Chart(document.getElementById('chartHourly'), {
+      type: 'bar',
+      data: {
+        labels: hours,
+        datasets: [{
+          label: 'Sale Events',
+          data: counts,
+          backgroundColor: BLUE,
+          borderRadius: 3
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 2 } } }
+      }
+    });
+  })();
+</script>
+</body>
+</html>
