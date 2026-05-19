@@ -5,7 +5,7 @@
       "args": ["-y", "n8n-mcp"],
       "env": {
         "N8N_API_URL": "https://n8n-snir.toolip.tech",
-        "N8N_API_KEY": "YOUR_N8N_API_KEY_HERE"
+        "N8N_API_KEY": "$N8N_API_KEY"
       }
     }
   }
