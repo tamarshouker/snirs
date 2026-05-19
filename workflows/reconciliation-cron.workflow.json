@@ -39,7 +39,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"p_tenant_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"p_sale_date\": \"{{ (() => { const d = new Date(Date.now() + 8*3600000); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })() }}\"\n}",
+        "jsonBody": "={\n  \"p_tenant_id\": \"{{ $env.TENANT_ID }}\",\n  \"p_sale_date\": \"{{ (() => { const d = new Date(Date.now() + 8*3600000); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })() }}\"\n}",
         "options": {
           "response": {
             "response": {
@@ -95,7 +95,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://waha.toolip.tech/api/sendText",
+        "url": "={{ $env.WAHA_URL }}/api/sendText",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -107,7 +107,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"session\": \"snir-session\",\n  \"chatId\": \"OWNER_WA_JID@c.us\",\n  \"text\": \"[RECONCILIATION ALERT]\\n{{ $('Parse Reconciliation Results').item.json.summaryText }}\"\n}",
+        "jsonBody": "={\n  \"session\": \"{{ $env.WAHA_SESSION }}\",\n  \"chatId\": \"{{ $env.OWNER_WA_JID }}\",\n  \"text\": \"[RECONCILIATION ALERT]\\n{{ $('Parse Reconciliation Results').item.json.summaryText }}\"\n}",
         "options": {}
       },
       "id": "rc000005-0000-0000-0000-000000000005",

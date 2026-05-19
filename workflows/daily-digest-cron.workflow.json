@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/daily_totals?tenant_id=eq.00000000-0000-0000-0000-000000000001&sale_date=eq.{{ (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0]; })() }}&select=id,location_id,sale_date,cash,card,total,lead_source,locations(name)",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/daily_totals?tenant_id=eq.{{ $env.TENANT_ID }}&sale_date=eq.{{ (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0]; })() }}&select=id,location_id,sale_date,cash,card,total,lead_source,locations(name)",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendHeaders": true,
@@ -55,7 +55,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/live_events?tenant_id=eq.00000000-0000-0000-0000-000000000001&occurred_at=gte.{{ (() => { const d = new Date(Date.now() + 8*3600000); const s = d.toISOString().split('T')[0]; return s + 'T00:00:00+08:00'; })() }}&occurred_at=lte.{{ (() => { const d = new Date(Date.now() + 8*3600000); const s = d.toISOString().split('T')[0]; return s + 'T23:59:59+08:00'; })() }}&outcome=neq.failed&select=id,location_id,lead_employee_id,amount,sale_state,occurred_at,employees(display_name)",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/live_events?tenant_id=eq.{{ $env.TENANT_ID }}&occurred_at=gte.{{ (() => { const d = new Date(Date.now() + 8*3600000); const s = d.toISOString().split('T')[0]; return s + 'T00:00:00+08:00'; })() }}&occurred_at=lte.{{ (() => { const d = new Date(Date.now() + 8*3600000); const s = d.toISOString().split('T')[0]; return s + 'T23:59:59+08:00'; })() }}&outcome=neq.failed&select=id,location_id,lead_employee_id,amount,sale_state,occurred_at,employees(display_name)",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendHeaders": true,
@@ -89,7 +89,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/reconciliation_log?tenant_id=eq.00000000-0000-0000-0000-000000000001&sale_date=eq.{{ (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0]; })() }}&select=location_id,status,diff_pct,locations(name)",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/reconciliation_log?tenant_id=eq.{{ $env.TENANT_ID }}&sale_date=eq.{{ (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0]; })() }}&select=location_id,status,diff_pct,locations(name)",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendHeaders": true,
@@ -133,7 +133,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://waha.toolip.tech/api/sendText",
+        "url": "={{ $env.WAHA_URL }}/api/sendText",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -145,7 +145,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"session\": \"snir-session\",\n  \"chatId\": \"OWNER_WA_JID@c.us\",\n  \"text\": {{ JSON.stringify($json.message) }}\n}",
+        "jsonBody": "={\n  \"session\": \"{{ $env.WAHA_SESSION }}\",\n  \"chatId\": \"{{ $env.OWNER_WA_JID }}\",\n  \"text\": {{ JSON.stringify($json.message) }}\n}",
         "options": {}
       },
       "id": "dd000006-0000-0000-0000-000000000006",

@@ -142,7 +142,7 @@
             },
             {
               "name": "p_cooldown_minutes",
-              "value": "60"
+              "value": "={{ $env.ALERT_COOLDOWN_MINUTES }}"
             }
           ]
         },
@@ -226,7 +226,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://waha.toolip.tech/api/sendText",
+        "url": "={{ $env.WAHA_URL }}/api/sendText",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -238,7 +238,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"session\": \"snir-session\",\n  \"chatId\": \"OWNER_WA_JID@c.us\",\n  \"text\": \"[ALERT] WAHA session {{ $('WhatsApp Listener').item.json.body.session }} FAILED\"\n}",
+        "jsonBody": "={\n  \"session\": \"{{ $env.WAHA_SESSION }}\",\n  \"chatId\": \"{{ $env.OWNER_WA_JID }}\",\n  \"text\": \"[ALERT] WAHA session {{ $('WhatsApp Listener').item.json.body.session }} FAILED\"\n}",
         "options": {}
       },
       "id": "88888888-8888-8888-8888-888888888888",
@@ -258,7 +258,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/locations?tenant_id=eq.00000000-0000-0000-0000-000000000001&active=eq.true&select=id,name,wa_group_jid,source_group,timezone,manager_wa",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/locations?tenant_id=eq.{{ $env.TENANT_ID }}&active=eq.true&select=id,name,wa_group_jid,source_group,timezone,manager_wa",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendHeaders": true,
@@ -284,7 +284,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Normalize Filter Classify\n// Extracts normalized fields from incoming WAHA NOWEB payload\n// and enriches with location info loaded from Supabase\n\nconst item = $input.first();\nconst body = item.json.body;\nconst payload = body?.payload || {};\n\n// Load locations from previous node (passed as context via $('Load Locations').all())\nlet SNIR_GROUPS = [];\nlet SNIR_GROUP_MAP = {};\ntry {\n  const locItems = $('Load Locations').all();\n  if (locItems && locItems.length > 0) {\n    const locations = Array.isArray(locItems[0].json) ? locItems[0].json : locItems.map(i => i.json);\n    for (const loc of locations) {\n      if (loc.wa_group_jid) {\n        SNIR_GROUPS.push(loc.wa_group_jid);\n        SNIR_GROUP_MAP[loc.wa_group_jid] = {\n          id: loc.id,\n          name: loc.name,\n          source_group: loc.source_group,\n          timezone: loc.timezone,\n          manager_wa: loc.manager_wa\n        };\n      }\n    }\n  }\n} catch (e) {\n  // fallback: empty maps for testing\n  SNIR_GROUPS = [];\n  SNIR_GROUP_MAP = {};\n}\n\nconst event_type = body?.event || 'unknown';\nconst session = body?.session || '';\n\n// Extract group JID and sender JID\nconst group_jid = (payload.from || '').endsWith('@g.us') ? payload.from : null;\nconst sender_jid = payload.participant\n  || payload?._data?.key?.participant\n  || payload?.participantAlt\n  || (group_jid ? null : payload.from)\n  || '';\n\n// Extract message body\nconst msg_body = payload.body || payload.text || '';\n\n// Extract timestamp\nconst timestamp_unix = payload.timestamp || Math.floor(Date.now() / 1000);\n\n// Extract message ID (dedupe key)\nconst wa_message_id = payload.id || '';\n\n// Extract quoted message ID (thread linking)\nconst quoted_msg_id = payload?.replyTo?.id || payload?.quotedMsgId || null;\n\n// Determine source group from group JID\nconst loc_info = group_jid ? (SNIR_GROUP_MAP[group_jid] || null) : null;\nconst source_group = loc_info?.source_group || null;\nconst location_id = loc_info?.id || null;\n\n// Filter: only process messages from known Snir groups\n// (if SNIR_GROUPS is empty we pass all for testing)\nif (SNIR_GROUPS.length > 0 && group_jid && !SNIR_GROUPS.includes(group_jid)) {\n  return [];\n}\n\n// Detect edit/revoke event types\nconst is_revoked = event_type === 'message.revoked';\nconst is_edited = event_type === 'message.edited';\n\n// Build normalized object\nconst _normalized = {\n  event_type,\n  session,\n  group_jid,\n  sender_jid,\n  body: msg_body,\n  timestamp_unix,\n  wa_message_id,\n  quoted_msg_id,\n  source_group,\n  location_id,\n  is_revoked,\n  is_edited,\n  tenant_id: '00000000-0000-0000-0000-000000000001'\n};\n\nreturn [{ json: { ...item.json, _normalized } }];\n"
+        "jsCode": "// Normalize Filter Classify\n// Extracts normalized fields from incoming WAHA NOWEB payload\n// and enriches with location info loaded from Supabase\n\nconst item = $input.first();\nconst body = item.json.body;\nconst payload = body?.payload || {};\n\n// Load locations from previous node (passed as context via $('Load Locations').all())\nlet SNIR_GROUPS = [];\nlet SNIR_GROUP_MAP = {};\ntry {\n  const locItems = $('Load Locations').all();\n  if (locItems && locItems.length > 0) {\n    const locations = Array.isArray(locItems[0].json) ? locItems[0].json : locItems.map(i => i.json);\n    for (const loc of locations) {\n      if (loc.wa_group_jid) {\n        SNIR_GROUPS.push(loc.wa_group_jid);\n        SNIR_GROUP_MAP[loc.wa_group_jid] = {\n          id: loc.id,\n          name: loc.name,\n          source_group: loc.source_group,\n          timezone: loc.timezone,\n          manager_wa: loc.manager_wa\n        };\n      }\n    }\n  }\n} catch (e) {\n  // fallback: empty maps for testing\n  SNIR_GROUPS = [];\n  SNIR_GROUP_MAP = {};\n}\n\nconst event_type = body?.event || 'unknown';\nconst session = body?.session || '';\n\n// Extract group JID and sender JID\nconst group_jid = (payload.from || '').endsWith('@g.us') ? payload.from : null;\nconst sender_jid = payload.participant\n  || payload?._data?.key?.participant\n  || payload?.participantAlt\n  || (group_jid ? null : payload.from)\n  || '';\n\n// Extract message body\nconst msg_body = payload.body || payload.text || '';\n\n// Extract timestamp\nconst timestamp_unix = payload.timestamp || Math.floor(Date.now() / 1000);\n\n// Extract message ID (dedupe key)\nconst wa_message_id = payload.id || '';\n\n// Extract quoted message ID (thread linking)\nconst quoted_msg_id = payload?.replyTo?.id || payload?.quotedMsgId || null;\n\n// Determine source group from group JID\nconst loc_info = group_jid ? (SNIR_GROUP_MAP[group_jid] || null) : null;\nconst source_group = loc_info?.source_group || null;\nconst location_id = loc_info?.id || null;\n\n// Filter: only process messages from known Snir groups\n// (if SNIR_GROUPS is empty we pass all for testing)\nif (SNIR_GROUPS.length > 0 && group_jid && !SNIR_GROUPS.includes(group_jid)) {\n  return [];\n}\n\n// Detect edit/revoke event types\nconst is_revoked = event_type === 'message.revoked';\nconst is_edited = event_type === 'message.edited';\n\n// Build normalized object\nconst _normalized = {\n  event_type,\n  session,\n  group_jid,\n  sender_jid,\n  body: msg_body,\n  timestamp_unix,\n  wa_message_id,\n  quoted_msg_id,\n  source_group,\n  location_id,\n  is_revoked,\n  is_edited,\n  tenant_id: $env.TENANT_ID\n};\n\nreturn [{ json: { ...item.json, _normalized } }];\n"
       },
       "id": "99999999-9999-9999-9999-999999999999",
       "name": "Normalize Filter Classify",
@@ -379,7 +379,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"tenant_id\": \"{{ $('Normalize Filter Classify').item.json._normalized.tenant_id }}\",\n  \"wa_message_id\": \"{{ $('Normalize Filter Classify').item.json._normalized.wa_message_id }}\",\n  \"group_jid\": \"{{ $('Normalize Filter Classify').item.json._normalized.group_jid }}\",\n  \"sender_jid\": \"{{ $('Normalize Filter Classify').item.json._normalized.sender_jid }}\",\n  \"body\": {{ JSON.stringify($('Normalize Filter Classify').item.json._normalized.body) }},\n  \"timestamp_unix\": {{ $('Normalize Filter Classify').item.json._normalized.timestamp_unix }},\n  \"event_type\": \"{{ $('Normalize Filter Classify').item.json._normalized.event_type }}\",\n  \"source_group\": {{ $('Normalize Filter Classify').item.json._normalized.source_group ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.source_group) : 'null' }},\n  \"session\": \"{{ $('Normalize Filter Classify').item.json._normalized.session }}\",\n  \"location_id\": {{ $('Normalize Filter Classify').item.json._normalized.location_id ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.location_id) : 'null' }},\n  \"wa_group_jid\": {{ $('Normalize Filter Classify').item.json._normalized.group_jid ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.group_jid) : 'null' }},\n  \"quoted_wa_message_id\": {{ $('Normalize Filter Classify').item.json._normalized.quoted_msg_id ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.quoted_msg_id) : 'null' }},\n  \"parser_version\": \"1.0.0\"\n}",
+        "jsonBody": "={\n  \"tenant_id\": \"{{ $('Normalize Filter Classify').item.json._normalized.tenant_id }}\",\n  \"wa_message_id\": \"{{ $('Normalize Filter Classify').item.json._normalized.wa_message_id }}\",\n  \"group_jid\": \"{{ $('Normalize Filter Classify').item.json._normalized.group_jid }}\",\n  \"sender_jid\": \"{{ $('Normalize Filter Classify').item.json._normalized.sender_jid }}\",\n  \"body\": {{ JSON.stringify($('Normalize Filter Classify').item.json._normalized.body) }},\n  \"timestamp_unix\": {{ $('Normalize Filter Classify').item.json._normalized.timestamp_unix }},\n  \"event_type\": \"{{ $('Normalize Filter Classify').item.json._normalized.event_type }}\",\n  \"source_group\": {{ $('Normalize Filter Classify').item.json._normalized.source_group ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.source_group) : 'null' }},\n  \"session\": \"{{ $('Normalize Filter Classify').item.json._normalized.session }}\",\n  \"location_id\": {{ $('Normalize Filter Classify').item.json._normalized.location_id ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.location_id) : 'null' }},\n  \"wa_group_jid\": {{ $('Normalize Filter Classify').item.json._normalized.group_jid ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.group_jid) : 'null' }},\n  \"quoted_wa_message_id\": {{ $('Normalize Filter Classify').item.json._normalized.quoted_msg_id ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.quoted_msg_id) : 'null' }},\n  \"parser_version\": \"{{ $env.PARSER_VERSION }}\"\n}",
         "options": {}
       },
       "id": "11111111-2222-3333-4444-555555555555",
@@ -472,7 +472,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 256,\n  \"system\": \"You classify WhatsApp messages from a cosmetics kiosk chain in the Philippines. Staff mix English, Tagalog (Taglish), and Hebrew-English.\\n\\nReturn ONLY valid JSON: {\\\"class\\\": \\\"<class>\\\", \\\"confidence\\\": <0-1>, \\\"fields\\\": {<extracted fields>}}\\n\\nClasses and their extracted fields:\\n- eod_summary: {\\\"location_hint\\\": str, \\\"date\\\": str, \\\"cash\\\": num, \\\"card\\\": num, \\\"total\\\": num, \\\"payment_methods\\\": [{\\\"method\\\": str, \\\"amount\\\": num}], \\\"employee_totals\\\": [{\\\"name\\\": str, \\\"amount\\\": num}]}\\n- single_sale: {\\\"lead_name\\\": str, \\\"helper_names\\\": [str], \\\"amount\\\": num, \\\"currency_raw\\\": str, \\\"product_hint\\\": str, \\\"payment_hint\\\": str, \\\"sale_state\\\": \\\"open|mid|closed|cancelled\\\", \\\"is_reply_continuation\\\": bool}\\n- contest: {\\\"title\\\": str, \\\"prize\\\": str, \\\"criteria\\\": str}\\n- announcement: {\\\"title\\\": str, \\\"body\\\": str}\\n- chatter: {}\\n- unknown: {\\\"reason\\\": str}\\n\\nFew-shot examples:\\nMessage: \\\"8,600 Tomas Edwin\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.97,\\\"fields\\\":{\\\"lead_name\\\":\\\"Tomas\\\",\\\"helper_names\\\":[\\\"Edwin\\\"],\\\"amount\\\":8600,\\\"currency_raw\\\":\\\"8,600\\\",\\\"sale_state\\\":\\\"closed\\\"}}\\nMessage: \\\"Yuri Vanessa Jasmine 6000 facial later\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.95,\\\"fields\\\":{\\\"lead_name\\\":\\\"Yuri\\\",\\\"helper_names\\\":[\\\"Vanessa\\\",\\\"Jasmine\\\"],\\\"amount\\\":6000,\\\"currency_raw\\\":\\\"6000\\\",\\\"product_hint\\\":\\\"facial later\\\",\\\"sale_state\\\":\\\"open\\\"}}\\nMessage: \\\"Swiped 200k\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.92,\\\"fields\\\":{\\\"amount\\\":200000,\\\"currency_raw\\\":\\\"200k\\\",\\\"sale_state\\\":\\\"open\\\"}}\\nMessage: \\\"Total 258k Done\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.93,\\\"fields\\\":{\\\"amount\\\":258000,\\\"currency_raw\\\":\\\"258k\\\",\\\"sale_state\\\":\\\"closed\\\"}}\\nMessage: \\\"Failed\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.91,\\\"fields\\\":{\\\"sale_state\\\":\\\"cancelled\\\"}}\\nMessage: \\\"MELIA EOD 4/20: Cash 17,090 KLP 196,895 BPI 80k BDO 64k GCash 198k Maya 142k Card 504,195 Total 521,285\\\" \\u2192 {\\\"class\\\":\\\"eod_summary\\\",\\\"confidence\\\":0.98,\\\"fields\\\":{\\\"location_hint\\\":\\\"MELIA\\\",\\\"date\\\":\\\"4/20\\\",\\\"total\\\":521285}}\\nMessage: \\\"Good morning everyone! SMBF and FTV open today\\\" \\u2192 {\\\"class\\\":\\\"announcement\\\",\\\"confidence\\\":0.88,\\\"fields\\\":{\\\"title\\\":\\\"Good morning\\\",\\\"body\\\":\\\"SMBF and FTV open today\\\"}}\\nMessage: \\\"haha okay\\\" \\u2192 {\\\"class\\\":\\\"chatter\\\",\\\"confidence\\\":0.99,\\\"fields\\\":{}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"={{ $('Normalize Filter Classify').item.json._normalized.body }}\"}]\n}",
+        "jsonBody": "={\n  \"model\": \"{{ $env.CLASSIFIER_MODEL }}\",\n  \"max_tokens\": 256,\n  \"system\": \"You classify WhatsApp messages from a cosmetics kiosk chain in the Philippines. Staff mix English, Tagalog (Taglish), and Hebrew-English.\\n\\nReturn ONLY valid JSON: {\\\"class\\\": \\\"<class>\\\", \\\"confidence\\\": <0-1>, \\\"fields\\\": {<extracted fields>}}\\n\\nClasses and their extracted fields:\\n- eod_summary: {\\\"location_hint\\\": str, \\\"date\\\": str, \\\"cash\\\": num, \\\"card\\\": num, \\\"total\\\": num, \\\"payment_methods\\\": [{\\\"method\\\": str, \\\"amount\\\": num}], \\\"employee_totals\\\": [{\\\"name\\\": str, \\\"amount\\\": num}]}\\n- single_sale: {\\\"lead_name\\\": str, \\\"helper_names\\\": [str], \\\"amount\\\": num, \\\"currency_raw\\\": str, \\\"product_hint\\\": str, \\\"payment_hint\\\": str, \\\"sale_state\\\": \\\"open|mid|closed|cancelled\\\", \\\"is_reply_continuation\\\": bool}\\n- contest: {\\\"title\\\": str, \\\"prize\\\": str, \\\"criteria\\\": str}\\n- announcement: {\\\"title\\\": str, \\\"body\\\": str}\\n- chatter: {}\\n- unknown: {\\\"reason\\\": str}\\n\\nFew-shot examples:\\nMessage: \\\"8,600 Tomas Edwin\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.97,\\\"fields\\\":{\\\"lead_name\\\":\\\"Tomas\\\",\\\"helper_names\\\":[\\\"Edwin\\\"],\\\"amount\\\":8600,\\\"currency_raw\\\":\\\"8,600\\\",\\\"sale_state\\\":\\\"closed\\\"}}\\nMessage: \\\"Yuri Vanessa Jasmine 6000 facial later\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.95,\\\"fields\\\":{\\\"lead_name\\\":\\\"Yuri\\\",\\\"helper_names\\\":[\\\"Vanessa\\\",\\\"Jasmine\\\"],\\\"amount\\\":6000,\\\"currency_raw\\\":\\\"6000\\\",\\\"product_hint\\\":\\\"facial later\\\",\\\"sale_state\\\":\\\"open\\\"}}\\nMessage: \\\"Swiped 200k\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.92,\\\"fields\\\":{\\\"amount\\\":200000,\\\"currency_raw\\\":\\\"200k\\\",\\\"sale_state\\\":\\\"open\\\"}}\\nMessage: \\\"Total 258k Done\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.93,\\\"fields\\\":{\\\"amount\\\":258000,\\\"currency_raw\\\":\\\"258k\\\",\\\"sale_state\\\":\\\"closed\\\"}}\\nMessage: \\\"Failed\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.91,\\\"fields\\\":{\\\"sale_state\\\":\\\"cancelled\\\"}}\\nMessage: \\\"MELIA EOD 4/20: Cash 17,090 KLP 196,895 BPI 80k BDO 64k GCash 198k Maya 142k Card 504,195 Total 521,285\\\" \\u2192 {\\\"class\\\":\\\"eod_summary\\\",\\\"confidence\\\":0.98,\\\"fields\\\":{\\\"location_hint\\\":\\\"MELIA\\\",\\\"date\\\":\\\"4/20\\\",\\\"total\\\":521285}}\\nMessage: \\\"Good morning everyone! SMBF and FTV open today\\\" \\u2192 {\\\"class\\\":\\\"announcement\\\",\\\"confidence\\\":0.88,\\\"fields\\\":{\\\"title\\\":\\\"Good morning\\\",\\\"body\\\":\\\"SMBF and FTV open today\\\"}}\\nMessage: \\\"haha okay\\\" \\u2192 {\\\"class\\\":\\\"chatter\\\",\\\"confidence\\\":0.99,\\\"fields\\\":{}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"={{ $('Normalize Filter Classify').item.json._normalized.body }}\"}]\n}",
         "options": {
           "response": {
             "response": {
@@ -520,7 +520,7 @@
                   },
                   {
                     "leftValue": "={{ $json._classifier.confidence }}",
-                    "rightValue": "0.85",
+                    "rightValue": "={{ parseFloat($env.CLASSIFIER_CONFIDENCE_THRESHOLD) }}",
                     "operator": {
                       "type": "number",
                       "operation": "gte"
@@ -550,7 +550,7 @@
                   },
                   {
                     "leftValue": "={{ $json._classifier.confidence }}",
-                    "rightValue": "0.85",
+                    "rightValue": "={{ parseFloat($env.CLASSIFIER_CONFIDENCE_THRESHOLD) }}",
                     "operator": {
                       "type": "number",
                       "operation": "gte"
@@ -580,7 +580,7 @@
                   },
                   {
                     "leftValue": "={{ $json._classifier.confidence }}",
-                    "rightValue": "0.85",
+                    "rightValue": "={{ parseFloat($env.CLASSIFIER_CONFIDENCE_THRESHOLD) }}",
                     "operator": {
                       "type": "number",
                       "operation": "gte"
@@ -601,7 +601,7 @@
                 },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json._classifier.confidence < 0.85 || $json._classifier.class === 'unknown' }}",
+                    "leftValue": "={{ $json._classifier.confidence < parseFloat($env.CLASSIFIER_CONFIDENCE_THRESHOLD) || $json._classifier.class === 'unknown' }}",
                     "rightValue": "true",
                     "operator": {
                       "type": "string",
@@ -857,7 +857,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"tenant_id\": \"{{ $json._normalized.tenant_id }}\",\n  \"raw_message_id\": {{ $json._raw_message_id ? JSON.stringify($json._raw_message_id) : 'null' }},\n  \"classifier_output\": {{ JSON.stringify($json._classifier) }},\n  \"confidence\": {{ $json._classifier.confidence }},\n  \"reason\": \"{{ $json._classifier.confidence < 0.85 ? 'low_confidence' : 'unknown_class' }}\",\n  \"reviewed\": false\n}",
+        "jsonBody": "={\n  \"tenant_id\": \"{{ $json._normalized.tenant_id }}\",\n  \"raw_message_id\": {{ $json._raw_message_id ? JSON.stringify($json._raw_message_id) : 'null' }},\n  \"classifier_output\": {{ JSON.stringify($json._classifier) }},\n  \"confidence\": {{ $json._classifier.confidence }},\n  \"reason\": \"{{ $json._classifier.confidence < parseFloat($env.CLASSIFIER_CONFIDENCE_THRESHOLD) ? 'low_confidence' : 'unknown_class' }}\",\n  \"reviewed\": false\n}",
         "options": {}
       },
       "id": "00000000-1111-2222-3333-444444444444",
