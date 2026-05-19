@@ -1,0 +1,1195 @@
+{
+  "name": "snir-ph-full",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-listening",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "47bf3eaa-038c-4693-9cec-2c80d36b0e4d",
+      "name": "WhatsApp Listener",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 300],
+      "webhookId": "whatsapp-listening"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "session.status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "session_status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.event }}",
+                    "rightValue": "message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "message_event"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Event Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.payload.status }}",
+              "rightValue": "FAILED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Is FAILED?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 140]
+    },
+    {
+      "parameters": {},
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Session OK",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [660, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/try_alert_dedup",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_session",
+              "value": "={{ $json.body.session }}"
+            },
+            {
+              "name": "p_event",
+              "value": "session.FAILED"
+            },
+            {
+              "name": "p_cooldown_minutes",
+              "value": "60"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Check Alert Cooldown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 60]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Should Fire?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 60]
+    },
+    {
+      "parameters": {},
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Alert Suppressed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1100, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/alerts_log",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"critical\",\n  \"channel\": \"whatsapp\",\n  \"kind\": \"session.FAILED\",\n  \"body\": \"WAHA session {{ $('WhatsApp Listener').item.json.body.session }} reported FAILED status\",\n  \"meta\": {{ JSON.stringify({ session: $('WhatsApp Listener').item.json.body.session, payload: $('WhatsApp Listener').item.json.body.payload }) }}\n}",
+        "options": {}
+      },
+      "id": "77777777-7777-7777-7777-777777777777",
+      "name": "Log Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha.toolip.tech/api/sendText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session\": \"snir-session\",\n  \"chatId\": \"OWNER_WA_JID@c.us\",\n  \"text\": \"[ALERT] WAHA session {{ $('WhatsApp Listener').item.json.body.session }} FAILED\"\n}",
+        "options": {}
+      },
+      "id": "88888888-8888-8888-8888-888888888888",
+      "name": "Send WhatsApp Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {},
+      "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "name": "Unknown Event",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [440, 460]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/locations?tenant_id=eq.00000000-0000-0000-0000-000000000001&active=eq.true&select=id,name,wa_group_jid,source_group,timezone,manager_wa",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "name": "Load Locations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Filter Classify\n// Extracts normalized fields from incoming WAHA NOWEB payload\n// and enriches with location info loaded from Supabase\n\nconst item = $input.first();\nconst body = item.json.body;\nconst payload = body?.payload || {};\n\n// Load locations from previous node (passed as context via $('Load Locations').all())\nlet SNIR_GROUPS = [];\nlet SNIR_GROUP_MAP = {};\ntry {\n  const locItems = $('Load Locations').all();\n  if (locItems && locItems.length > 0) {\n    const locations = Array.isArray(locItems[0].json) ? locItems[0].json : locItems.map(i => i.json);\n    for (const loc of locations) {\n      if (loc.wa_group_jid) {\n        SNIR_GROUPS.push(loc.wa_group_jid);\n        SNIR_GROUP_MAP[loc.wa_group_jid] = {\n          id: loc.id,\n          name: loc.name,\n          source_group: loc.source_group,\n          timezone: loc.timezone,\n          manager_wa: loc.manager_wa\n        };\n      }\n    }\n  }\n} catch (e) {\n  // fallback: empty maps for testing\n  SNIR_GROUPS = [];\n  SNIR_GROUP_MAP = {};\n}\n\nconst event_type = body?.event || 'unknown';\nconst session = body?.session || '';\n\n// Extract group JID and sender JID\nconst group_jid = (payload.from || '').endsWith('@g.us') ? payload.from : null;\nconst sender_jid = payload.participant\n  || payload?._data?.key?.participant\n  || payload?.participantAlt\n  || (group_jid ? null : payload.from)\n  || '';\n\n// Extract message body\nconst msg_body = payload.body || payload.text || '';\n\n// Extract timestamp\nconst timestamp_unix = payload.timestamp || Math.floor(Date.now() / 1000);\n\n// Extract message ID (dedupe key)\nconst wa_message_id = payload.id || '';\n\n// Extract quoted message ID (thread linking)\nconst quoted_msg_id = payload?.replyTo?.id || payload?.quotedMsgId || null;\n\n// Determine source group from group JID\nconst loc_info = group_jid ? (SNIR_GROUP_MAP[group_jid] || null) : null;\nconst source_group = loc_info?.source_group || null;\nconst location_id = loc_info?.id || null;\n\n// Filter: only process messages from known Snir groups\n// (if SNIR_GROUPS is empty we pass all for testing)\nif (SNIR_GROUPS.length > 0 && group_jid && !SNIR_GROUPS.includes(group_jid)) {\n  return [];\n}\n\n// Detect edit/revoke event types\nconst is_revoked = event_type === 'message.revoked';\nconst is_edited = event_type === 'message.edited';\n\n// Build normalized object\nconst _normalized = {\n  event_type,\n  session,\n  group_jid,\n  sender_jid,\n  body: msg_body,\n  timestamp_unix,\n  wa_message_id,\n  quoted_msg_id,\n  source_group,\n  location_id,\n  is_revoked,\n  is_edited,\n  tenant_id: '00000000-0000-0000-0000-000000000001'\n};\n\nreturn [{ json: { ...item.json, _normalized } }];\n"
+      },
+      "id": "99999999-9999-9999-9999-999999999999",
+      "name": "Normalize Filter Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/raw_messages?wa_message_id=eq.{{ $json._normalized.wa_message_id }}&select=id,wa_message_id&limit=1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "name": "Dedupe Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ Array.isArray($json) ? $json.length : 0 }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      "name": "Already Seen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {},
+      "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "name": "Duplicate — skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1400, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/raw_messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tenant_id\": \"{{ $('Normalize Filter Classify').item.json._normalized.tenant_id }}\",\n  \"wa_message_id\": \"{{ $('Normalize Filter Classify').item.json._normalized.wa_message_id }}\",\n  \"group_jid\": \"{{ $('Normalize Filter Classify').item.json._normalized.group_jid }}\",\n  \"sender_jid\": \"{{ $('Normalize Filter Classify').item.json._normalized.sender_jid }}\",\n  \"body\": {{ JSON.stringify($('Normalize Filter Classify').item.json._normalized.body) }},\n  \"timestamp_unix\": {{ $('Normalize Filter Classify').item.json._normalized.timestamp_unix }},\n  \"event_type\": \"{{ $('Normalize Filter Classify').item.json._normalized.event_type }}\",\n  \"source_group\": {{ $('Normalize Filter Classify').item.json._normalized.source_group ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.source_group) : 'null' }},\n  \"session\": \"{{ $('Normalize Filter Classify').item.json._normalized.session }}\",\n  \"location_id\": {{ $('Normalize Filter Classify').item.json._normalized.location_id ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.location_id) : 'null' }},\n  \"wa_group_jid\": {{ $('Normalize Filter Classify').item.json._normalized.group_jid ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.group_jid) : 'null' }},\n  \"quoted_wa_message_id\": {{ $('Normalize Filter Classify').item.json._normalized.quoted_msg_id ? JSON.stringify($('Normalize Filter Classify').item.json._normalized.quoted_msg_id) : 'null' }},\n  \"parser_version\": \"1.0.0\"\n}",
+        "options": {}
+      },
+      "id": "11111111-2222-3333-4444-555555555555",
+      "name": "Insert raw_message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Normalize Filter Classify').item.json._normalized.is_revoked || $('Normalize Filter Classify').item.json._normalized.is_edited }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "22222222-3333-4444-5555-666666666666",
+      "name": "Handle Edit/Delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1620, 220]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/raw_messages?wa_message_id=eq.{{ $('Normalize Filter Classify').item.json._normalized.wa_message_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"body\": {{ JSON.stringify($('Normalize Filter Classify').item.json._normalized.body) }},\n  \"event_type\": \"{{ $('Normalize Filter Classify').item.json._normalized.event_type }}\"\n}",
+        "options": {}
+      },
+      "id": "33333333-4444-5555-6666-777777777777",
+      "name": "Update raw_message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1840, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.ANTHROPIC_API_KEY }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"max_tokens\": 256,\n  \"system\": \"You classify WhatsApp messages from a cosmetics kiosk chain in the Philippines. Staff mix English, Tagalog (Taglish), and Hebrew-English.\\n\\nReturn ONLY valid JSON: {\\\"class\\\": \\\"<class>\\\", \\\"confidence\\\": <0-1>, \\\"fields\\\": {<extracted fields>}}\\n\\nClasses and their extracted fields:\\n- eod_summary: {\\\"location_hint\\\": str, \\\"date\\\": str, \\\"cash\\\": num, \\\"card\\\": num, \\\"total\\\": num, \\\"payment_methods\\\": [{\\\"method\\\": str, \\\"amount\\\": num}], \\\"employee_totals\\\": [{\\\"name\\\": str, \\\"amount\\\": num}]}\\n- single_sale: {\\\"lead_name\\\": str, \\\"helper_names\\\": [str], \\\"amount\\\": num, \\\"currency_raw\\\": str, \\\"product_hint\\\": str, \\\"payment_hint\\\": str, \\\"sale_state\\\": \\\"open|mid|closed|cancelled\\\", \\\"is_reply_continuation\\\": bool}\\n- contest: {\\\"title\\\": str, \\\"prize\\\": str, \\\"criteria\\\": str}\\n- announcement: {\\\"title\\\": str, \\\"body\\\": str}\\n- chatter: {}\\n- unknown: {\\\"reason\\\": str}\\n\\nFew-shot examples:\\nMessage: \\\"8,600 Tomas Edwin\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.97,\\\"fields\\\":{\\\"lead_name\\\":\\\"Tomas\\\",\\\"helper_names\\\":[\\\"Edwin\\\"],\\\"amount\\\":8600,\\\"currency_raw\\\":\\\"8,600\\\",\\\"sale_state\\\":\\\"closed\\\"}}\\nMessage: \\\"Yuri Vanessa Jasmine 6000 facial later\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.95,\\\"fields\\\":{\\\"lead_name\\\":\\\"Yuri\\\",\\\"helper_names\\\":[\\\"Vanessa\\\",\\\"Jasmine\\\"],\\\"amount\\\":6000,\\\"currency_raw\\\":\\\"6000\\\",\\\"product_hint\\\":\\\"facial later\\\",\\\"sale_state\\\":\\\"open\\\"}}\\nMessage: \\\"Swiped 200k\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.92,\\\"fields\\\":{\\\"amount\\\":200000,\\\"currency_raw\\\":\\\"200k\\\",\\\"sale_state\\\":\\\"open\\\"}}\\nMessage: \\\"Total 258k Done\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.93,\\\"fields\\\":{\\\"amount\\\":258000,\\\"currency_raw\\\":\\\"258k\\\",\\\"sale_state\\\":\\\"closed\\\"}}\\nMessage: \\\"Failed\\\" \\u2192 {\\\"class\\\":\\\"single_sale\\\",\\\"confidence\\\":0.91,\\\"fields\\\":{\\\"sale_state\\\":\\\"cancelled\\\"}}\\nMessage: \\\"MELIA EOD 4/20: Cash 17,090 KLP 196,895 BPI 80k BDO 64k GCash 198k Maya 142k Card 504,195 Total 521,285\\\" \\u2192 {\\\"class\\\":\\\"eod_summary\\\",\\\"confidence\\\":0.98,\\\"fields\\\":{\\\"location_hint\\\":\\\"MELIA\\\",\\\"date\\\":\\\"4/20\\\",\\\"total\\\":521285}}\\nMessage: \\\"Good morning everyone! SMBF and FTV open today\\\" \\u2192 {\\\"class\\\":\\\"announcement\\\",\\\"confidence\\\":0.88,\\\"fields\\\":{\\\"title\\\":\\\"Good morning\\\",\\\"body\\\":\\\"SMBF and FTV open today\\\"}}\\nMessage: \\\"haha okay\\\" \\u2192 {\\\"class\\\":\\\"chatter\\\",\\\"confidence\\\":0.99,\\\"fields\\\":{}}\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"={{ $('Normalize Filter Classify').item.json._normalized.body }}\"}]\n}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "44444444-5555-6666-7777-888888888888",
+      "name": "Classify with Haiku",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Classifier Output\n// Parses Anthropic API response and extracts class/confidence/fields\n\nconst item = $input.first();\nconst anthropicResponse = item.json;\n\nlet classifierResult = {\n  class: 'unknown',\n  confidence: 0,\n  fields: { reason: 'parse_error' }\n};\n\ntry {\n  // Anthropic API response has content[0].text\n  const rawText = anthropicResponse?.content?.[0]?.text || '';\n  \n  // Strip any markdown code fences if present\n  const jsonText = rawText.replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/i, '').trim();\n  \n  const parsed = JSON.parse(jsonText);\n  classifierResult = {\n    class: parsed.class || 'unknown',\n    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0,\n    fields: parsed.fields || {}\n  };\n} catch (e) {\n  classifierResult = {\n    class: 'unknown',\n    confidence: 0,\n    fields: { reason: 'json_parse_failed: ' + String(e) }\n  };\n}\n\n// Merge classifier result into item\nconst normalized = $('Normalize Filter Classify').item.json._normalized;\nconst rawMsgRow = $('Insert raw_message').item.json;\n\nreturn [{\n  json: {\n    ...item.json,\n    _normalized: normalized,\n    _raw_message_id: Array.isArray(rawMsgRow) ? rawMsgRow[0]?.id : rawMsgRow?.id,\n    _classifier: classifierResult\n  }\n}];\n"
+      },
+      "id": "55555555-6666-7777-8888-999999999999",
+      "name": "Parse Classifier Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2060, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._classifier.class }}",
+                    "rightValue": "single_sale",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json._classifier.confidence }}",
+                    "rightValue": "0.85",
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "high_single_sale"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._classifier.class }}",
+                    "rightValue": "eod_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json._classifier.confidence }}",
+                    "rightValue": "0.85",
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "high_eod"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ ['contest','announcement','chatter'].includes($json._classifier.class) }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json._classifier.confidence }}",
+                    "rightValue": "0.85",
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "high_other"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._classifier.confidence < 0.85 || $json._classifier.class === 'unknown' }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "low_confidence"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "66666666-7777-8888-9999-aaaaaaaaaaaa",
+      "name": "Confidence Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [2280, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract Single Sale\n// Parses sale data from classifier output and resolves employee + thread\n\nconst item = $input.first();\nconst normalized = item.json._normalized;\nconst fields = item.json._classifier.fields || {};\nconst rawMsgId = item.json._raw_message_id;\n\n// Parse amount from currency_raw or direct amount field\nfunction parseAmount(raw) {\n  if (typeof raw === 'number') return raw;\n  if (!raw) return null;\n  const s = String(raw).replace(/[\\$\\u20b1,\\s]/g, '').toLowerCase();\n  if (s.endsWith('m')) return parseFloat(s) * 1000000;\n  if (s.endsWith('k')) return parseFloat(s) * 1000;\n  return parseFloat(s) || null;\n}\n\nconst amount = fields.amount != null ? fields.amount : parseAmount(fields.currency_raw);\n\n// Map sale_state from classifier to valid DB values (exclude 'cancelled')\nlet sale_state = fields.sale_state || 'open';\nif (sale_state === 'cancelled') sale_state = null;\n\n// Determine outcome\nlet outcome = null;\nif (fields.sale_state === 'closed') outcome = 'success';\nif (fields.sale_state === 'cancelled') outcome = 'failed';\n\n// occurred_at from timestamp\nconst occurred_at = normalized.timestamp_unix\n  ? new Date(normalized.timestamp_unix * 1000).toISOString()\n  : new Date().toISOString();\n\n// sale_thread_id: will be resolved via Supabase lookup in next step\n// For now, pass quoted_msg_id for thread lookup\nconst quoted_msg_id = normalized.quoted_msg_id;\n\nreturn [{\n  json: {\n    ...item.json,\n    _sale: {\n      tenant_id: normalized.tenant_id,\n      location_id: normalized.location_id,\n      lead_name: fields.lead_name || null,\n      helper_names: fields.helper_names || [],\n      amount,\n      product_hint: fields.product_hint || null,\n      payment_hint: fields.payment_hint || null,\n      sale_state: sale_state || 'open',\n      outcome,\n      occurred_at,\n      raw_message_id: rawMsgId,\n      confidence: item.json._classifier.confidence,\n      source_group: normalized.source_group,\n      quoted_msg_id,\n      sender_jid: normalized.sender_jid,\n      currency_raw: fields.currency_raw\n    }\n  }\n}];\n"
+      },
+      "id": "77777777-8888-9999-aaaa-bbbbbbbbbbbb",
+      "name": "Extract Single Sale",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/resolve_employee",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_name\": \"{{ $json._sale.lead_name }}\",\n  \"p_location_id\": \"{{ $json._sale.location_id }}\",\n  \"p_tenant_id\": \"{{ $json._sale.tenant_id }}\"\n}",
+        "options": {}
+      },
+      "id": "88888888-9999-aaaa-bbbb-cccccccccccc",
+      "name": "Resolve Lead Employee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2720, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/live_events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tenant_id\": \"{{ $('Extract Single Sale').item.json._sale.tenant_id }}\",\n  \"location_id\": {{ $('Extract Single Sale').item.json._sale.location_id ? JSON.stringify($('Extract Single Sale').item.json._sale.location_id) : 'null' }},\n  \"lead_employee_id\": {{ $json ? JSON.stringify($json) : 'null' }},\n  \"amount\": {{ $('Extract Single Sale').item.json._sale.amount != null ? $('Extract Single Sale').item.json._sale.amount : 'null' }},\n  \"product_hint\": {{ $('Extract Single Sale').item.json._sale.product_hint ? JSON.stringify($('Extract Single Sale').item.json._sale.product_hint) : 'null' }},\n  \"outcome\": {{ $('Extract Single Sale').item.json._sale.outcome ? JSON.stringify($('Extract Single Sale').item.json._sale.outcome) : 'null' }},\n  \"occurred_at\": \"{{ $('Extract Single Sale').item.json._sale.occurred_at }}\",\n  \"raw_message_id\": {{ $('Extract Single Sale').item.json._sale.raw_message_id ? JSON.stringify($('Extract Single Sale').item.json._sale.raw_message_id) : 'null' }},\n  \"confidence\": {{ $('Extract Single Sale').item.json._sale.confidence }},\n  \"sale_state\": \"{{ $('Extract Single Sale').item.json._sale.sale_state }}\",\n  \"source_group\": {{ $('Extract Single Sale').item.json._sale.source_group ? JSON.stringify($('Extract Single Sale').item.json._sale.source_group) : 'null' }}\n}",
+        "options": {}
+      },
+      "id": "99999999-aaaa-bbbb-cccc-dddddddddddd",
+      "name": "Insert live_event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2940, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Insert live_event_employees\n// Builds junction rows for lead + helpers\n\nconst item = $input.first();\nconst saleData = $('Extract Single Sale').item.json._sale;\nconst liveEventRow = Array.isArray(item.json) ? item.json[0] : item.json;\nconst liveEventId = liveEventRow?.id;\nconst tenantId = saleData.tenant_id;\n\nconst rows = [];\n\n// Lead\nconst leadEmployeeId = $('Resolve Lead Employee').item.json;\nif (leadEmployeeId && liveEventId) {\n  rows.push({\n    tenant_id: tenantId,\n    live_event_id: liveEventId,\n    employee_id: leadEmployeeId,\n    role: 'lead',\n    pct_share: null,\n    amount_credited: saleData.amount\n  });\n}\n\n// Helpers — would need resolve_employee calls for each; for now store as-is if we had IDs\n// In production, loop through saleData.helper_names and call resolve_employee for each\n// For Phase 1, we pass helpers as separate HTTP calls or batch; simplified here:\n\nif (rows.length === 0) {\n  return [{ json: { skipped: true, reason: 'no_employee_ids_resolved' } }];\n}\n\nreturn rows.map(r => ({ json: r }));\n"
+      },
+      "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "name": "Build Employee Junction Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3160, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/live_event_employees",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+      "name": "Insert live_event_employees",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3380, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract EOD Summary fields\n// Parses date, location, cash, card, total, payment methods, employee amounts\n\nconst item = $input.first();\nconst normalized = item.json._normalized;\nconst fields = item.json._classifier.fields || {};\nconst rawMsgId = item.json._raw_message_id;\n\n// Parse amount helper\nfunction parseAmount(raw) {\n  if (typeof raw === 'number') return raw;\n  if (!raw) return null;\n  const s = String(raw).replace(/[\\$\\u20b1,\\s]/g, '').toLowerCase();\n  if (s.endsWith('m')) return parseFloat(s) * 1000000;\n  if (s.endsWith('k')) return parseFloat(s) * 1000;\n  return parseFloat(s) || null;\n}\n\n// Determine sale date from fields.date or timestamp\nlet sale_date = null;\nif (fields.date) {\n  // e.g. '4/20' — assume current year, Manila time\n  try {\n    const parts = fields.date.split('/');\n    if (parts.length === 2) {\n      const now = new Date();\n      sale_date = `${now.getFullYear()}-${String(parts[0]).padStart(2,'0')}-${String(parts[1]).padStart(2,'0')}`;\n    }\n  } catch (e) {\n    sale_date = null;\n  }\n}\nif (!sale_date) {\n  // Fall back to timestamp date in Manila time\n  const ts = normalized.timestamp_unix ? normalized.timestamp_unix * 1000 : Date.now();\n  const d = new Date(ts);\n  // Convert to Asia/Manila (UTC+8)\n  const manilaOffset = 8 * 60;\n  const localDate = new Date(d.getTime() + manilaOffset * 60000);\n  sale_date = localDate.toISOString().split('T')[0];\n}\n\nconst cash = parseAmount(fields.cash);\nconst card = parseAmount(fields.card);\nconst total = parseAmount(fields.total);\n\nconst payment_methods = (fields.payment_methods || []).map(pm => ({\n  method: pm.method,\n  amount: parseAmount(pm.amount)\n}));\n\nconst employee_totals = (fields.employee_totals || []).map(et => ({\n  name: et.name,\n  amount: parseAmount(et.amount)\n}));\n\nreturn [{\n  json: {\n    ...item.json,\n    _eod: {\n      tenant_id: normalized.tenant_id,\n      location_id: normalized.location_id,\n      sale_date,\n      cash,\n      card,\n      total,\n      lead_source: 'jpl_totals',\n      raw_message_id: rawMsgId,\n      payment_methods,\n      employee_totals,\n      location_hint: fields.location_hint || null\n    }\n  }\n}];\n"
+      },
+      "id": "cccccccc-dddd-eeee-ffff-000000000000",
+      "name": "Extract EOD",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/daily_totals",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation,resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tenant_id\": \"{{ $json._eod.tenant_id }}\",\n  \"location_id\": {{ $json._eod.location_id ? JSON.stringify($json._eod.location_id) : 'null' }},\n  \"sale_date\": \"{{ $json._eod.sale_date }}\",\n  \"cash\": {{ $json._eod.cash != null ? $json._eod.cash : 'null' }},\n  \"card\": {{ $json._eod.card != null ? $json._eod.card : 'null' }},\n  \"total\": {{ $json._eod.total != null ? $json._eod.total : 'null' }},\n  \"lead_source\": \"{{ $json._eod.lead_source }}\",\n  \"raw_message_id\": {{ $json._eod.raw_message_id ? JSON.stringify($json._eod.raw_message_id) : 'null' }}\n}",
+        "options": {}
+      },
+      "id": "dddddddd-eeee-ffff-0000-111111111111",
+      "name": "Insert daily_totals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build payment_breakdown rows and employee_sales rows from EOD extract\n\nconst item = $input.first();\nconst eodData = $('Extract EOD').item.json._eod;\nconst dailyTotalsRow = Array.isArray(item.json) ? item.json[0] : item.json;\nconst dailyTotalsId = dailyTotalsRow?.id;\nconst tenantId = eodData.tenant_id;\n\nconst rows = [];\n\nif (dailyTotalsId && eodData.payment_methods && eodData.payment_methods.length > 0) {\n  for (const pm of eodData.payment_methods) {\n    if (pm.amount != null) {\n      rows.push({\n        tenant_id: tenantId,\n        daily_totals_id: dailyTotalsId,\n        method: pm.method,\n        amount: pm.amount\n      });\n    }\n  }\n}\n\nif (rows.length === 0) {\n  return [{ json: { skipped: true, reason: 'no_payment_methods' } }];\n}\n\nreturn rows.map(r => ({ json: r }));\n"
+      },
+      "id": "eeeeeeee-ffff-0000-1111-222222222222",
+      "name": "Build Payment Breakdown Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/payment_breakdown",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "ffffffff-0000-1111-2222-333333333333",
+      "name": "Insert payment_breakdown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3160, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/parse_review_queue",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tenant_id\": \"{{ $json._normalized.tenant_id }}\",\n  \"raw_message_id\": {{ $json._raw_message_id ? JSON.stringify($json._raw_message_id) : 'null' }},\n  \"classifier_output\": {{ JSON.stringify($json._classifier) }},\n  \"confidence\": {{ $json._classifier.confidence }},\n  \"reason\": \"{{ $json._classifier.confidence < 0.85 ? 'low_confidence' : 'unknown_class' }}\",\n  \"reviewed\": false\n}",
+        "options": {}
+      },
+      "id": "00000000-1111-2222-3333-444444444444",
+      "name": "Low Confidence — Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2500, 440]
+    },
+    {
+      "parameters": {},
+      "id": "11111111-2222-3333-4444-aaaaaaaaaaaa",
+      "name": "Chatter/Other — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2500, 560]
+    }
+  ],
+  "connections": {
+    "WhatsApp Listener": {
+      "main": [
+        [
+          {
+            "node": "Event Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event Router": {
+      "main": [
+        [
+          {
+            "node": "Is FAILED?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Locations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is FAILED?": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Cooldown",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Session OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert Cooldown": {
+      "main": [
+        [
+          {
+            "node": "Should Fire?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Fire?": {
+      "main": [
+        [
+          {
+            "node": "Log Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Suppressed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Alert": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Locations": {
+      "main": [
+        [
+          {
+            "node": "Normalize Filter Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Filter Classify": {
+      "main": [
+        [
+          {
+            "node": "Dedupe Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedupe Check": {
+      "main": [
+        [
+          {
+            "node": "Already Seen?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Seen?": {
+      "main": [
+        [
+          {
+            "node": "Insert raw_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Duplicate — skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert raw_message": {
+      "main": [
+        [
+          {
+            "node": "Handle Edit/Delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Edit/Delete?": {
+      "main": [
+        [
+          {
+            "node": "Update raw_message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Classify with Haiku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify with Haiku": {
+      "main": [
+        [
+          {
+            "node": "Parse Classifier Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classifier Output": {
+      "main": [
+        [
+          {
+            "node": "Confidence Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confidence Router": {
+      "main": [
+        [
+          {
+            "node": "Extract Single Sale",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract EOD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chatter/Other — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Low Confidence — Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Single Sale": {
+      "main": [
+        [
+          {
+            "node": "Resolve Lead Employee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Lead Employee": {
+      "main": [
+        [
+          {
+            "node": "Insert live_event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert live_event": {
+      "main": [
+        [
+          {
+            "node": "Build Employee Junction Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Employee Junction Rows": {
+      "main": [
+        [
+          {
+            "node": "Insert live_event_employees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract EOD": {
+      "main": [
+        [
+          {
+            "node": "Insert daily_totals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert daily_totals": {
+      "main": [
+        [
+          {
+            "node": "Build Payment Breakdown Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Payment Breakdown Rows": {
+      "main": [
+        [
+          {
+            "node": "Insert payment_breakdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["snir", "whatsapp", "pipeline"],
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "instanceId": "snir-ph-full"
+  }
+}

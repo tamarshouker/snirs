@@ -1,0 +1,235 @@
+{
+  "name": "snir-daily-digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 13 * * *"
+            }
+          ]
+        }
+      },
+      "id": "dd000001-0000-0000-0000-000000000001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/daily_totals?tenant_id=eq.00000000-0000-0000-0000-000000000001&sale_date=eq.{{ (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0]; })() }}&select=id,location_id,sale_date,cash,card,total,lead_source,locations(name)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "dd000002-0000-0000-0000-000000000002",
+      "name": "Fetch Daily Totals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/live_events?tenant_id=eq.00000000-0000-0000-0000-000000000001&occurred_at=gte.{{ (() => { const d = new Date(Date.now() + 8*3600000); const s = d.toISOString().split('T')[0]; return s + 'T00:00:00+08:00'; })() }}&occurred_at=lte.{{ (() => { const d = new Date(Date.now() + 8*3600000); const s = d.toISOString().split('T')[0]; return s + 'T23:59:59+08:00'; })() }}&outcome=neq.failed&select=id,location_id,lead_employee_id,amount,sale_state,occurred_at,employees(display_name)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "dd000003-0000-0000-0000-000000000003",
+      "name": "Fetch Live Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 380]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/reconciliation_log?tenant_id=eq.00000000-0000-0000-0000-000000000001&sale_date=eq.{{ (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0]; })() }}&select=location_id,status,diff_pct,locations(name)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "dd000004-0000-0000-0000-000000000004",
+      "name": "Fetch Reconciliation Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format Daily Digest WhatsApp Message\n// Combines daily_totals, live_events, and reconciliation status\n\nconst todayStr = (() => {\n  const d = new Date(Date.now() + 8 * 3600000);\n  return d.toISOString().split('T')[0];\n})();\n\n// Collect data from parallel nodes\nlet dailyTotals = [];\nlet liveEvents = [];\nlet reconStatus = [];\n\ntry { dailyTotals = $('Fetch Daily Totals').all()[0]?.json || []; } catch(e) {}\ntry { liveEvents = $('Fetch Live Events').all()[0]?.json || []; } catch(e) {}\ntry { reconStatus = $('Fetch Reconciliation Status').all()[0]?.json || []; } catch(e) {}\n\nif (!Array.isArray(dailyTotals)) dailyTotals = [];\nif (!Array.isArray(liveEvents)) liveEvents = [];\nif (!Array.isArray(reconStatus)) reconStatus = [];\n\n// Build location totals map\nconst locationTotalsMap = {};\nfor (const row of dailyTotals) {\n  const locName = row.locations?.name || row.location_id || 'Unknown';\n  locationTotalsMap[row.location_id] = {\n    name: locName,\n    total: row.total || 0,\n    cash: row.cash || 0,\n    card: row.card || 0,\n    sale_date: row.sale_date\n  };\n}\n\n// Aggregate live events by location\nconst eventsByLocation = {};\nfor (const ev of liveEvents) {\n  if (!ev.location_id) continue;\n  if (!eventsByLocation[ev.location_id]) {\n    eventsByLocation[ev.location_id] = { count: 0, total: 0 };\n  }\n  eventsByLocation[ev.location_id].count += 1;\n  eventsByLocation[ev.location_id].total += (ev.amount || 0);\n}\n\n// Top performer by lead_employee across events\nconst empTotals = {};\nfor (const ev of liveEvents) {\n  if (!ev.lead_employee_id) continue;\n  const empName = ev.employees?.display_name || ev.lead_employee_id;\n  if (!empTotals[empName]) empTotals[empName] = 0;\n  empTotals[empName] += (ev.amount || 0);\n}\nconst sortedEmployees = Object.entries(empTotals)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 5);\n\n// Sort locations by EOD total\nconst sortedLocations = Object.values(locationTotalsMap)\n  .sort((a, b) => (b.total || 0) - (a.total || 0));\n\n// Format currency\nfunction formatPHP(n) {\n  if (n == null) return 'N/A';\n  return 'P' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 });\n}\n\n// Build message\nconst lines = [];\nlines.push(`*Daily Digest — ${todayStr}*`);\nlines.push('');\n\nif (sortedLocations.length > 0) {\n  lines.push('*Top Locations (EOD Reported):*');\n  for (const loc of sortedLocations) {\n    lines.push(`  ${loc.name}: ${formatPHP(loc.total)} (Cash ${formatPHP(loc.cash)} / Card ${formatPHP(loc.card)})`);\n  }\n} else {\n  lines.push('*Locations:* No EOD data received yet');\n}\n\nlines.push('');\n\nif (sortedEmployees.length > 0) {\n  lines.push('*Top Performers (Live Events):*');\n  for (const [name, amt] of sortedEmployees) {\n    lines.push(`  ${name}: ${formatPHP(amt)}`);\n  }\n} else {\n  lines.push('*Performers:* No live event data');\n}\n\nlines.push('');\n\n// Reconciliation mismatches\nconst reconAlerts = reconStatus.filter(r => r.status === 'alert');\nconst reconMissing = reconStatus.filter(r => r.status === 'missing_eod');\n\nif (reconAlerts.length > 0) {\n  lines.push('*Reconciliation Mismatches:*');\n  for (const r of reconAlerts) {\n    const locName = r.locations?.name || r.location_id;\n    lines.push(`  MISMATCH ${locName}: diff ${r.diff_pct != null ? r.diff_pct + '%' : 'N/A'}`);\n  }\n  lines.push('');\n}\n\nif (reconMissing.length > 0) {\n  lines.push('*Missing EODs:*');\n  for (const r of reconMissing) {\n    const locName = r.locations?.name || r.location_id;\n    lines.push(`  NO EOD: ${locName}`);\n  }\n  lines.push('');\n}\n\nconst totalRevenue = sortedLocations.reduce((sum, l) => sum + (l.total || 0), 0);\nlines.push(`*Total Revenue Today: ${formatPHP(totalRevenue)}*`);\n\nconst message = lines.join('\\n');\n\nreturn [{ json: { message, todayStr, totalRevenue, locationCount: sortedLocations.length } }];\n"
+      },
+      "id": "dd000005-0000-0000-0000-000000000005",
+      "name": "Format Digest Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha.toolip.tech/api/sendText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session\": \"snir-session\",\n  \"chatId\": \"OWNER_WA_JID@c.us\",\n  \"text\": {{ JSON.stringify($json.message) }}\n}",
+        "options": {}
+      },
+      "id": "dd000006-0000-0000-0000-000000000006",
+      "name": "Send Daily Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 380]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Daily Totals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Live Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Reconciliation Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Daily Totals": {
+      "main": [
+        [
+          {
+            "node": "Format Digest Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Live Events": {
+      "main": [
+        [
+          {
+            "node": "Format Digest Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Reconciliation Status": {
+      "main": [
+        [
+          {
+            "node": "Format Digest Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Digest Message": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["snir", "digest", "cron"],
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "instanceId": "snir-daily-digest"
+  }
+}

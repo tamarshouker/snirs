@@ -1,0 +1,228 @@
+{
+  "name": "snir-reconciliation-cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 15 * * *"
+            }
+          ]
+        }
+      },
+      "id": "rc000001-0000-0000-0000-000000000001",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/run_reconciliation",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_tenant_id\": \"00000000-0000-0000-0000-000000000001\",\n  \"p_sale_date\": \"{{ (() => { const d = new Date(Date.now() + 8*3600000); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })() }}\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "rc000002-0000-0000-0000-000000000002",
+      "name": "Run Reconciliation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check reconciliation results for any alert-status locations\nconst items = $input.all();\nconst results = items[0]?.json;\n\n// results is an array of reconciliation rows from the RPC\nconst rows = Array.isArray(results) ? results : [];\n\nconst alerts = rows.filter(r => r.status === 'alert' || r.status === 'missing_eod');\nconst allOk = alerts.length === 0;\n\n// Build summary text\nlet summaryLines = [`Reconciliation for ${rows[0]?.sale_date || 'yesterday'}:`];\nfor (const row of rows) {\n  const icon = row.status === 'ok' ? 'OK' : row.status === 'missing_eod' ? 'MISSING EOD' : 'ALERT';\n  summaryLines.push(`  [${icon}] ${row.location_name}: events=${row.sum_events}, eod=${row.eod_reported}, diff=${row.diff != null ? row.diff : 'N/A'} (${row.diff_pct != null ? row.diff_pct + '%' : 'N/A'})`);\n}\n\nconst summaryText = summaryLines.join('\\n');\n\nreturn [{\n  json: {\n    rows,\n    alerts,\n    allOk,\n    summaryText,\n    alertCount: alerts.length\n  }\n}];\n"
+      },
+      "id": "rc000003-0000-0000-0000-000000000003",
+      "name": "Parse Reconciliation Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.allOk }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "rc000004-0000-0000-0000-000000000004",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://waha.toolip.tech/api/sendText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session\": \"snir-session\",\n  \"chatId\": \"OWNER_WA_JID@c.us\",\n  \"text\": \"[RECONCILIATION ALERT]\\n{{ $('Parse Reconciliation Results').item.json.summaryText }}\"\n}",
+        "options": {}
+      },
+      "id": "rc000005-0000-0000-0000-000000000005",
+      "name": "Send Reconciliation Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/alerts_log",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"info\",\n  \"channel\": \"cron\",\n  \"kind\": \"reconciliation_ran\",\n  \"body\": \"Daily reconciliation completed\",\n  \"meta\": {{ JSON.stringify({ allOk: $('Parse Reconciliation Results').item.json.allOk, alertCount: $('Parse Reconciliation Results').item.json.alertCount, rowCount: $('Parse Reconciliation Results').item.json.rows.length }) }}\n}",
+        "options": {}
+      },
+      "id": "rc000006-0000-0000-0000-000000000006",
+      "name": "Log Reconciliation Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run Reconciliation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Reconciliation": {
+      "main": [
+        [
+          {
+            "node": "Parse Reconciliation Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reconciliation Results": {
+      "main": [
+        [
+          {
+            "node": "Has Alerts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Send Reconciliation Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Reconciliation Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reconciliation Alert": {
+      "main": [
+        [
+          {
+            "node": "Log Reconciliation Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["snir", "reconciliation", "cron"],
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "instanceId": "snir-reconciliation-cron"
+  }
+}
